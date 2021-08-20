@@ -1,0 +1,653 @@
+---
+title: "Functions"
+author: "YoussefAyachi"
+date: "5/28/2021"
+output: html_document
+---
+
+# I. FitHiC
+
+## a. Creating FitHiC inputs
+
+### i. Fragment file 
+```{r Function : FitHiC::FitHiC Fragments Argument}
+GetFragmentsFile<-function(INPUT_TABLE,CHR_NB){
+
+#duplicate
+finaltable_tempo<-INPUT_TABLE
+
+#initiation
+id_fragments<-unique(c(finaltable_tempo[,3] , finaltable_tempo[,7]))
+col_marginalizedContactCount<-vector("numeric",length=length(id_fragments))
+
+#marginalizedContactCount 
+for(i in 1:length(id_fragments)){
+  id_concerned<-id_fragments[i]
+  id_unique_table<-finaltable_tempo %>% filter(pos1==id_concerned | pos2 ==id_concerned ) %>% mutate(score=round(score)) 
+  col_marginalizedContactCount[i]<-sum(id_unique_table[,9])
+  }
+  
+#columns : 1 , 2 , 5
+col_chr<-rep(CHR_NB,length(id_fragments))
+col_extrafield<-rep(0,length(id_fragments))
+col_mappable<-rep(1,length(id_fragments))
+
+#table 
+FRAGMENTS_TABLE<-data.frame(col_chr,col_extrafield,id_fragments,col_marginalizedContactCount,col_mappable)
+
+return (FRAGMENTS_TABLE)
+}
+```
+
+### ii. Interaction file
+```{r Function : FitHiC::FitHiC Interactions Argument}
+GetInteractionsFile<-function(INPUT_TABLE,CHR_NB){
+
+#duplicate
+finaltable_tempo<-INPUT_TABLE
+
+#building 
+col_chr<-rep(CHR_NB,nrow(finaltable_tempo))
+col_finalCount<-as.integer(finaltable_tempo[,9])
+
+#table
+INTERACTIONS_TABLE<-data.frame(col_chr,finaltable_tempo[,3],col_chr,finaltable_tempo[,7],col_finalCount)
+return(INTERACTIONS_TABLE)
+}
+```
+
+## b. Automatisation of FitHiC::FitHiC on each data sample.
+Note that this function needs compressed files as inputs (.gzip). Thus, we need to zip our generated files.
+The execution of FitHiC::FitHiC leads to 4 outputs : {.fithic.pass1 , .fithic.pass2 , .spline.pass1 (zipped, -spline.pass2 (zipped). 
+```{r Function : FitHiC::FitHiC Global Function}
+FitHiCLocalFucntion<-function(FRAGMENTS_TABLE,INTERACTIONS_TABLE,FRAGMENTS_PATH,INTERACTIONS_PATH,OUTPUT_PATH){
+fwrite(FRAGMENTS_TABLE,compress="gzip", file = FRAGMENTS_PATH, quote = FALSE, sep='\t', row.names =       FALSE, col.names = FALSE)
+fwrite(INTERACTIONS_TABLE,compress="gzip", file = INTERACTIONS_PATH, quote = FALSE, sep='\t',            row.names = FALSE, col.names = FALSE) 
+FitHiC::FitHiC(FRAGMENTS_PATH,INTERACTIONS_PATH, outdir = OUTPUT_PATH )
+}
+```
+
+## c. Unzip the spline files
+Two of the four outputs of FitHiC are generated in a zipped format. To be able to open them easily, one can unzip them. 
+```{r Function : Unzip FitHiC outputs }
+GetUnzippedFitHiCResults<- function (WORKING_DIRECTORY){
+
+  setwd(WORKING_DIRECTORY)
+  spline_pass_1<-fread(".spline_pass1.significances.txt.gz")
+  spline_pass_2<-fread(".spline_pass2.significances.txt.gz")  
+  write.table(x=spline_pass_1, ".spline_pass1.significances.txt",sep="\t")
+  write.table(x=spline_pass_2, ".spline_pass2.significances.txt",sep="\t")
+
+}
+```
+
+# II. Bed Graphs 
+A bedgraph is a 2D  graph that shows the interaction ofe one specific bin with all the others. It is read by a genome browser as USCS or WashU genome browser. 
+The inputs of the following function are the finaltables. 
+
+```{r Function : Building BedGraph inputs , echo=FALSE}
+GetBedGraph<-function(OUTPUT_DIRECTORY , INPUT_TABLE , OUTPUT_NAME_TABLE.txt , CHR_NB, BIN_START, BIN_LENGTH){
+
+setwd(OUTPUT_DIRECTORY)
+imported_data<-INPUT_TABLE
+
+#filter with our bin 
+imported_data <- imported_data %>% filter ( (pos1==BIN_START) | (pos2==BIN_START)) 
+
+a<-imported_data %>% filter (pos2==BIN_START) %>% select("strand1", "chr1"  ,  "pos2" ,   "fres1" ,  "strand2" ,"chr2",    "pos1" ,   "fres2" , "score")
+
+b<-imported_data %>% filter (pos1==BIN_START) %>% select("strand1", "chr1"  ,  "pos1" ,   "fres1" ,  "strand2" ,"chr2",    "pos2" ,   "fres2" , "score")
+
+colnames(a)<-c("strand1", "chr1"  ,  "pos1" ,   "fres1" ,  "strand2" ,"chr2",    "pos2" ,   "fres2" , "score")
+
+imported_data_filtered<-rbind(a,b)
+
+#column 1 : chr
+bed_graph_col1<-rep(CHR_NB, nrow(imported_data_filtered))
+
+#column 2 : lower starting region 
+bed_graph_col2<-imported_data_filtered[,7]
+
+#column 3 : lower end region 
+bed_graph_col3<-imported_data_filtered[,7]+BIN_LENGTH
+
+#column 4 : Upper region and score : ex : chr1:758539-760203,2
+score<-imported_data_filtered[,9]
+bed_graph_col4<-score
+
+
+bed_graph_finaltable<-data.frame(bed_graph_col1,bed_graph_col2,bed_graph_col3,bed_graph_col4)
+write.table(bed_graph_finaltable , OUTPUT_NAME_TABLE.txt , sep='\t' , quote = FALSE, row.names =       FALSE, col.names = FALSE)
+}
+
+```
+
+
+# III. long_range file 
+## 1.  Get Long_range file from spline1-2
+```{r Function : Get the long_range tables from spline1-2 (FitHiC outputs) - WashU input}
+GetLongRangeFile<-function(CHR_NB, BIN_LENGTH_Kb, DIRECTORY_INPUT_TABLE ,  SPLINE_TABLE.txt , OUTPUT_NAME_TABLE.txt , MIN_SCORE , LOG) {
+
+setwd(DIRECTORY_INPUT_TABLE)
+working_table<-read.table(SPLINE_TABLE.txt, header=TRUE, sep="\t" )
+
+#column 1 : chr
+long_range_col1<-rep(paste("chr",CHR_NB), nrow(working_table))
+
+#column 2 : lower starting region 
+long_range_col2<-working_table[,2]
+
+#column 3 : lower end region 
+long_range_col3<-working_table[,2]+BIN_LENGTH_Kb
+
+if(missing(LOG)){
+score<-round(-log10(working_table[,7]),0)
+score[is.infinite(score)]<-0
+score[score==0]<-min(score[!score==0])
+}else{
+score<-round(-log2(working_table[,7]),0)
+score[is.infinite(score)]<-0
+score[score==0]<-min(score[!score==0])
+}
+
+#score correction
+score<-round(-log10(working_table[,7]),0)
+score[is.infinite(score)]<-0
+#replace score = 0 by score = 0.5
+
+#column 4 : Upper region and score : ex : chr1:758539-760203,2
+long_range_col4<-paste(paste("chr",CHR_NB),":",working_table[,4],"-",working_table[,4]+BIN_LENGTH_Kb,",",score,sep="")
+
+long_range_finaltable<-data.frame(long_range_col1,long_range_col2,long_range_col3,long_range_col4)
+
+#If we don't want 0 as scores : Eliminate all the rows with score = 0 
+if(MIN_SCORE==1){
+long_range_finaltable<-data.frame(long_range_col1,long_range_col2,long_range_col3,long_range_col4,score)
+colnames(long_range_finaltable)<-c(paste("col",1:5 , sep=""))
+long_range_finaltable <- long_range_finaltable %>% filter(!(col5==0)) %>% select (col1 , col2 , col3 , col4)
+}
+
+write.table(long_range_finaltable , OUTPUT_NAME_TABLE.txt , sep='\t' , quote = FALSE, row.names =       FALSE, col.names = FALSE)
+}
+```
+
+## 2.  Get Long_range file from spline1-2 and filtred for certain bins of interest
+It consists in filtering long_range_table for bins of interest (vec_bins_of_interest: 70000-75000 , 75000-80000 , 80000-85000). Thus, For each of the 3 chosen bins, we will get 5 tables, each one belonging to one cell poupulation (wtns, wts, kons, kos and published. 
+
+```{r Function : Get the long_range tables of a specific bin}
+
+GetLongRangeFileSpeceficBin <- function (BIN_OF_INTEREST_START) {
+  for(i in 1:length(vec_dataset_directories)){
+    setwd(vec_dataset_directories[i])
+    for(j in 1:length(vec_spline_file_names)){
+      working_table<-read.table(paste("long_range_from_spline_",j,"_",vec_dataset_names[i],".bed",sep=""),sep="\t",header = FALSE, dec=".")
+      bin_filtered_working_table<-working_table %>% filter ( (V3==BIN_OF_INTEREST_START) | (V4==BIN_OF_INTEREST_START))
+      write.table(bin_filtered_working_table, paste("long_range_from_spline",j,"_",vec_dataset_names[i],BIN_OF_INTEREST_START,".bed",sep=""))
+      }
+    }
+  }
+
+```
+
+## 3.  Get Long_range file from finaltables 
+This time, we eill get the long range tables directly from the finaltables inputs instead of using FitHiC outputs. 
+```{r Function : Get the long_range tables on finaltables}
+#EXECUTION on each  fithic output (not the splines outputs
+
+GetLongRangeFileFromFinaltable<-function(CHR_NB, BIN_LENGTH_Kb, DIRECTORY_INPUT_TABLE ,  FINALTABLE , OUTPUT_NAME_TABLE.txt , MIN_SCORE , LOG) {
+
+setwd(DIRECTORY_INPUT_TABLE)
+working_table<-read.table(FINALTABLE, header=TRUE, sep="\t" )
+
+#column 1 : chr
+long_range_col1<-rep(paste("chr",CHR_NB), nrow(working_table))
+
+#column 2 : lower starting region 
+long_range_col2<-working_table[,3]
+
+#column 3 : lower end region 
+long_range_col3<-working_table[,3]+BIN_LENGTH_Kb
+
+#column 4 : Upper region and score : ex : chr1:758539-760203,2
+score<-working_table[,9]
+long_range_col4<-paste("chr12",":",working_table[,7],"-",working_table[,7]+BIN_LENGTH_Kb,",",score,sep="")
+
+long_range_finaltable<-data.frame(long_range_col1,long_range_col2,long_range_col3,long_range_col4)
+
+#If we don't want 0 as scores : Eliminate all the rows with score = 0 
+if(MIN_SCORE==1){
+  long_range_finaltable<-data.frame(long_range_col1,long_range_col2,long_range_col3,long_range_col4,score)
+  colnames(long_range_finaltable)<-c(paste("col",1:5 , sep=""))
+  long_range_finaltable <- long_range_finaltable %>% filter(!(col5==0)) %>% select (col1 , col2 , col3 , col4)
+  }
+
+write.table(long_range_finaltable , OUTPUT_NAME_TABLE.txt , sep='\t' , quote = FALSE, row.names =       FALSE, col.names = FALSE)
+}
+
+```
+
+## 4.  Get Long_range file from finaltables filtred on bins of interest
+
+```{r Function : Get the long_range table from finaltables for specific bins}
+# Same for specific bins
+
+GetLongRangeFileFromFinaltableSpeceficBin <- function (BIN_OF_INTEREST_START) {
+  for(i in 1:length(vec_dataset_directories)){
+    setwd(Dir_Finaltables)
+    working_table<-as.data.frame(list_finaltables[i])
+    bin_filtered_working_table<-working_table %>% filter ( (pos1==BIN_OF_INTEREST_START) | (pos2==BIN_OF_INTEREST_START))
+      
+    setwd(vec_dataset_directories[i])
+    write.table(bin_filtered_working_table, paste("long_range_from_finaltable_",vec_dataset_names[i],BIN_OF_INTEREST_START,".bed",sep=""))
+    }
+  }
+
+```
+
+# IV. Descriptive Statistics : Bulding Score Tables For Each Sample 
+
+## 1. AllMatrix And Cluster data manipulation
+
+### a. Build a sparse matrix for the cluster (AllMatrix, Cluster , 100kb , 100kb No OAS ) from the sparse tables (608x608)
+
+```{r Function : Get Sparse Matrix of defined bins interval}
+GetSparseOfInterest<- function(FULL_SPARSE_TABLE, CONDITION, SAMPLE_NAME, BIN_LENGTH, CHR_NB, LOWER_BIN_START, UPPER_BIN_START ) {
+
+working_sparse<-FULL_SPARSE_TABLE
+
+colnames_of_interest<-colnames(working_sparse)
+lower_bin<- paste("chr12_",LOWER_BIN_START,"_",LOWER_BIN_START+BIN_LENGTH,sep="")
+upper_bin<- paste("chr12_",UPPER_BIN_START,"_",UPPER_BIN_START+BIN_LENGTH,sep="")
+
+index_lower_bin<-match(lower_bin,colnames_of_interest)
+index_upper_bin<-match(upper_bin,colnames_of_interest)
+colnames_of_interest<-colnames_of_interest[index_lower_bin:index_upper_bin]
+
+working_sparse<- as.matrix(working_sparse)
+working_sparse<- as.data.frame(working_sparse)
+working_sparse<- working_sparse %>% filter(row.names(working_sparse) %in% colnames_of_interest) %>% select(colnames_of_interest)
+
+return(working_sparse)
+}
+```
+
+### b. Get Sparse Matrix vectors
+
+```{r Function : Get Sparse Matrix Vector : From a Sparse MAtrix (Symmetric Matrix), get one Vector Containing 1/2 Of The Cells And No Diagonal Cells : From left to the right process}
+#Idea : From the left to the right, in the right half of the matrix , build two vectors of coordinates X and Y. Then for each i of X and Y , search for the cell of the sparse matrix. 
+
+GetVectorFromMatrix<-function(SPARSE_MATRIX){
+
+  working_sparse<-SPARSE_MATRIX
+  rownames_matrix<-rownames(working_sparse)
+  colnames_matrix<-colnames(working_sparse)
+
+  X_vec<-vector()
+  for (i in 1:nrow(working_sparse)){
+    X_vec<-c(X_vec,rep(i,length(i:ncol(working_sparse))-1))
+  }
+  
+  Y_vec<-vector()
+  for(i in 2:ncol(working_sparse)){
+      Y_vec<-c(Y_vec,i:ncol(working_sparse))
+  }
+ 
+  matrix_vector<-vector()
+  for(i in 1:length(X_vec)){
+    matrix_vector<-c(matrix_vector,working_sparse[X_vec[i],Y_vec[i]])
+  }
+
+  return(matrix_vector)
+}
+
+```
+
+### c. Clean Sparse Matrices Vector
+
+We replace 0 by min to not get NAs in Fold Change vectors computed further. 
+```{r Function : Cleaning All Sparse Matrices vector from All Inf , -Inf and Replace all 0 by min }
+
+GetCleanVector<- function (SPARSE_VECTOR){
+  working.vector<-SPARSE_VECTOR
+  working.vector[working.vector==Inf]<-max(working.vector[working.vector!=(Inf)])
+  working.vector[working.vector==-Inf]<-min(working.vector[working.vector!=(-Inf)])
+  working.vector[working.vector==0]<-min(working.vector[working.vector!=(0)])
+  return(working.vector)
+}
+
+#Use list as an input (Not practical in long executions: For AllMatrix Vectors)
+GetCleanVectorFromList<-function(LIST_OF_SPARSE_VECTORS){
+  for(i in 1:length(LIST_OF_SPARSE_VECTORS)){
+    LIST_OF_SPARSE_VECTORS[i]<-GetCleanVector(LIST_OF_SPARSE_VECTORS[i])
+  }
+  return(LIST_OF_SPARSE_VECTORS)
+}
+
+```
+
+columns are : WTNS, WTS, KONS, KOS, PUBLISHED, FC_wts_wtns, FC_kos_kons, binA and binB 
+Each row represent an interaction between binA and binB.
+```{r Function: Add interactions (A_BINS B_BINS) columns to FC_df_densities table}
+#input = sparse matrix 
+#output = 2 vectors : binA and bin B : 2 columns to add in FC_df_densities
+
+GetBinInteractionVetors<-function(SPARSE_MATRIX){
+
+  working_sparse<-SPARSE_MATRIX
+  rownames_matrix<-rownames(working_sparse)
+  colnames_matrix<-colnames(working_sparse)
+
+  A_vec<-vector()
+  for (i in 1:nrow(working_sparse)){
+    A_vec<-c(A_vec,rep(rownames_matrix[i],length(i:ncol(working_sparse))-1))
+  }
+  
+  B_vec<-vector()
+  for(i in 2:ncol(working_sparse)){
+      B_vec<-c(B_vec,i:ncol(working_sparse))
+  }
+  B_vec_bis<-vector()
+  for(i in 1:length(B_vec)){ B_vec_bis<-c(B_vec_bis,colnames_matrix[B_vec[i]])}
+  
+  return(list(A_vec , B_vec_bis))
+}
+
+```
+
+### d. Build Score Table for each Sample with Fold Change columns.
+Columns are : WTNS, WTS, KONS, KOS, PUBLISHED, FC_wts_wtns, FC_kos_kons, binA and binB 
+Each row represent an interaction between binA and binB.
+```{r Function: Add interactions (A_BINS B_BINS) columns to FC_df_densities table}
+#input = sparse matrix 
+#output = 2 vectors : binA and bin B : 2 columns to add in FC_df_densities
+
+GetBinInteractionVetors<-function(SPARSE_MATRIX){
+
+  working_sparse<-SPARSE_MATRIX
+  rownames_matrix<-rownames(working_sparse)
+  colnames_matrix<-colnames(working_sparse)
+
+  A_vec<-vector()
+  for (i in 1:nrow(working_sparse)){
+    A_vec<-c(A_vec,rep(rownames_matrix[i],length(i:ncol(working_sparse))-1))
+  }
+  
+  B_vec<-vector()
+  for(i in 2:ncol(working_sparse)){
+      B_vec<-c(B_vec,i:ncol(working_sparse))
+  }
+  B_vec_bis<-vector()
+  for(i in 1:length(B_vec)){ B_vec_bis<-c(B_vec_bis,colnames_matrix[B_vec[i]])}
+  
+  return(list(A_vec , B_vec_bis))
+}
+
+```
+
+## 2. KB100 and KB100_NO_OAS
+
+```{r Function : Get Sparse Matrix And Sparse Matrix Vector of Specified Bin }
+
+GetSparseMatrixAndVectorOfSpecifiedBin<-function(  SPARSE_MATRIX , LOWER_BIN_START , BIN_LENGTH_OF_INTEREST ) {
+
+lower_bin_start<-LOWER_BIN_START
+upper_bin_start<-lower_bin_start + BIN_LENGTH_OF_INTEREST
+sparse_matrix<-SPARSE_MATRIX
+
+
+lower_bin<- paste("chr12_",format(lower_bin_start,scientific=FALSE) ,"_",format(lower_bin_start+5000,scientific=F),sep="")
+upper_bin<- paste("chr12_",format(upper_bin_start,scientific=FALSE),"_",format(upper_bin_start+5000,scientific=FALSE),sep="")
+
+
+# total list of bins between lower_bin and upper_bin : lower_bin_start_vector
+
+lower_bin_temporarly<-lower_bin_start
+bin_nb_in_interval<-0
+lower_bin_start_vector<-vector("numeric")
+lower_bin_start_vector<-append(lower_bin_start_vector,lower_bin_temporarly)
+
+while(lower_bin_temporarly < upper_bin_start){
+bin_nb_in_interval<-bin_nb_in_interval+1
+lower_bin_temporarly<-format(as.numeric(lower_bin_temporarly)+5000,scienbtific=FALSE)
+lower_bin_start_vector<-append(lower_bin_start_vector,format(as.numeric(lower_bin_temporarly),scientific=FALSE))
+}
+
+
+
+# generate vector of rownames of interest 
+
+rownames_of_interest<-vector()
+for( j in 1:bin_nb_in_interval){
+rownames_of_interest <- append(rownames_of_interest, paste("chr12_",
+                                                           as.character(lower_bin_start_vector[j]),
+                                                           "_",
+                                                           as.character(format(as.numeric(lower_bin_start_vector[j])+5000, scientific=FALSE)),sep="")) 
+}
+
+# Get the sparse matrix of each bin of 100kb
+#= filter the sparse matrix with the rownames takes. 
+
+tempo_sparse_matrix<-sparse_matrix %>% filter (row.names(sparse_matrix) %in% rownames_of_interest) %>% select ( all_of(rownames_of_interest))
+
+# Get bins of interactions in the same order than the vector sparse matrix : bin_A and bin_B columns 
+
+list_A<-GetBinInteractionVetors(tempo_sparse_matrix)[[1]]
+list_B<-GetBinInteractionVetors(tempo_sparse_matrix)[[2]]
+
+# Get the sparse vector of each 100kb sparse matrix
+
+tempo_sparse_vector<-GetVectorFromMatrix(tempo_sparse_matrix)
+
+return(list(tempo_sparse_matrix,tempo_sparse_vector,list_A, list_B))
+}
+
+```
+
+Our Bin length = 100 000
+Our lower bin start is the first row name bin : 111875000
+
+```{r Function : GetAllBinStartEach100KB}
+GetAllBinStartEachFixedInterval<-function(lower_allregion_limit,upper_allregion_limit,BIN_LENGTH,INITIAL_BIN_LENGTH){
+  tempo_upper_limit<-lower_allregion_limit
+  vec_start_bins<-vector()
+
+  while(tempo_upper_limit<upper_allregion_limit){
+    vec_start_bins<-c(vec_start_bins,tempo_upper_limit)
+    tempo_upper_limit<-tempo_upper_limit+BIN_LENGTH
+  }
+  vec_start_big_bins<-vec_start_bins
+return(vec_start_big_bins)
+}
+
+```
+Our Bin length = 100 000.
+Our lower bin start is the first row name bin : 111875000.
+Becarfull , the last bin of 100Kb which is starting from 114875000. Thus, When aligning heatmaps with genome sequece, use the upper limit : 114875000-. OAS_cluster removed for KB100_NO_OASis equal to two bins. 
+```{r Function : Get KB100_Score_df  and its vectors}
+
+GetKB100ScoreTable<-function(WITH_OAS){
+
+
+if(WITH_OAS==FALSE){
+Start_100KB_BINS<-GetAllBinStartEachFixedInterval(111875000, 114910578 , 100000, 5000)
+
+}else{ #remove OAS CLuster 
+Start_100KB_BINS<-Start_100KB_BINS[!Start_100KB_BINS %in% c(113475000,113575000)]
+}
+
+df_list<-list()
+tempo_df<-data.frame()
+
+for(i in 1:length(list_sparse_matrices)){
+working_sparse<-list_sparse_matrices[[i]]
+
+final_tempo_sparse_vec<-vector()
+final_tempo_Abin_vec<-vector()
+final_tempo_Bbin_vec<-vector()
+
+
+  for( j in length(Start_100KB_BINS)-1){
+    tempo_output<-GetSparseMatrixAndVectorOfSpecifiedBin(working_sparse, Start_100KB_BINS[j], 100000)
+    tempo_sparse_vec<-tempo_output[[2]]
+    tempo_Abin_vec<-tempo_output[[3]]
+    tempo_Bbin_vec<-tempo_output[[4]]
+    #add to the corresponding data.fame
+    
+    final_tempo_sparse_vec<-c(final_tempo_sparse_vec,tempo_sparse_vec)
+    final_tempo_Abin_vec<-c(final_tempo_Abin_vec,tempo_Abin_vec)
+    final_tempo_Bbin_vec<-c(final_tempo_Bbin_vec, tempo_Bbin_vec)
+  }
+
+# each sparse_table will have a 3 column data frame : score, binA, binB. 
+
+tempo_df<-data.frame(C1_name=final_tempo_sparse_vec,
+                     C2_name=final_tempo_Abin_vec,
+                     C3_name=final_tempo_Bbin_vec)
+
+colnames(tempo_df)<-c(paste(vec_dataset_names[i],"Score",sep=""),"BinA","BinB")
+
+  if(WITH_OAS==TRUE){
+  nam_table<-paste("KB100_",vec_dataset_names[i],"_Initial_Score_df",sep="")
+  assign(nam_table, tempo_df)
+  }else{
+  nam_table<-paste("KB100_NO_OAS_",vec_dataset_names[i],"_Initial_Score_df",sep="")
+  assign(nam_table, tempo_df)
+  }
+
+
+
+df_list<-append(df_list,tempo_df)
+
+      if(WITH_OAS==TRUE){
+        nam_df_list<-"KB100_Initial_Score_list"
+        assign(nam_df_list, df_list)
+  
+      }else{
+        nam_df_list<-"KB100_NO_OAS_Initial_Score_list"
+        assign(nam_df_list, df_list)
+
+      }
+}
+
+ if(WITH_OAS==TRUE){
+   return(KB100_Initial_Score_list)
+ }else{
+   return(KB100_NO_OAS_Initial_Score_list)
+ }
+}
+
+```
+
+This function will output a list of 15 clumns , each three coluns are ex: wtns,binA,binB,wts,binA,binB,kons,...
+The binA and binB are the same. 
+
+
+# V. Data Analysis 
+## 1. Desnity plots of Fold Change scores to expect the distribution of our data. 
+
+One Can see that FC vectors seem to have Normal Distribution in both samples (Cluster And AllMatrix)
+
+## 2. Normality test for our score_df tables 
+Shapiro test can be done because of the length of our data vectors (>5000 values)
+
+i. We chose to do the Kolmogorov-Smirnov Normality test
+Remark : No Ex_aquo should be present to KS test.
+
+P.values are <<0.01. FC_wts_wtns and FC_kos_kons distributions are normal. We can use the t.test. 
+
+Observation :
+In the Cluster, significant difference between FC_wts_wtns and FC_kos_kons (p=0.09).
+No significant difference between the same vectors in the AllMatrix data.
+
+## 3. Vilon Plots Intra Inter 
+### a. IntraSample Violin Plots
+
+
+```{r Function :  Violin Plots IntraSample : wts_wtns VS kos_kons with t.test p.values}
+
+# 1 VIOLINPLOT Of wts_wtns each sample 
+violin_fc_names<-c("violin_fc_cluster", "violin_fc_allmatrix", "violin_fc_100kb" , "violin_fc_100kb_No_OAS")
+
+    #a. Preparing Violin Plot Dataframe
+GetViolinFCPlotINTRA<- function (SCORE_DF ,  SAMPLE_NAME, TEST){
+
+if(TEST=="t.test"){
+  test<-'t.test'
+}else{
+  test<-'wilcox.test'
+}
+  
+working.table<-SCORE_DF
+wts_wtns_vec_name<-rep("wts_wtns",nrow(working.table))
+kos_kons_vec_name<-rep("kos_kons",nrow(working.table))
+wts_wtns_FC<-working.table[,6]
+kos_kons_FC<-working.table[,7]
+df<-data.frame(c(wts_wtns_vec_name,kos_kons_vec_name),c(wts_wtns_FC,kos_kons_FC))
+colnames(df)<-c("C1","C2")
+
+    #b. preparing to show the p.values on the plot 
+df$C1 <- as.factor(df$C1)
+my_comparisons <- list( c("wts_wtns", "kos_kons") ) 
+df_test <- compare_means(C2 ~ C1, comparisons = my_comparisons, p.adj= "holm", method=test, data = df , paired=TRUE)
+df_test <- df_test %>% mutate(y.position = max(df$C2)+0.5)
+df_test$p.adj<-format(df_test$p.adj, scientific=TRUE )
+
+    #c. Generating the violin plot : intrasample - wts_wtns VS kos_kons
+violin_plot<- df %>% ggplot(aes(C1, C2)) +
+  
+  geom_violin(aes(fill=C1)) + 
+  geom_boxplot(width=0.1, fill="white") + 
+  xlab(c("")) + 
+  ggtitle(SAMPLE_NAME ) +  
+  theme(plot.title = element_text(hjust = 0.5)) +
+  guides(fill=guide_legend(title="")) +
+  ylab("Score (log2(FC))") + ylim(c(-3,5)) +
+  
+  scale_x_discrete(limits=c("wts_wtns","kos_kons")) + 
+  scale_fill_discrete(guide = guide_legend(reverse=TRUE) ) + 
+  scale_fill_brewer(palette=palette_color) + 
+
+  stat_pvalue_manual(df_test, label = "p.adj") 
+
+
+if(SAMPLE_NAME=="Cluster"){violin_plot<-violin_plot+ theme(legend.position="none")}
+if(SAMPLE_NAME=="100kb"){violin_plot<-violin_plot + theme(legend.position="none") }
+if(SAMPLE_NAME=="100kb NO OAS"){violin_plot<-violin_plot + theme(legend.position="right") 
+
+}
+
+    #d. Wilcoxon test resume
+test_details<- lm(C2~C1, data=df)
+
+return(list(violin_plot,test_details))
+}
+
+
+```
+
+### b. InterSample Violin Plots 
+
+Violin Plots InterSample : wts_wtns VS kos_kons
+wilcoxon with paired =FALSE beacause different length of the samples. 
+
+- Build dataframe of intersample : only 3 columns : C1=w or k ; C2=score ; C3=Sample
+- Build 3 data frames of 3 columns (one for each SAMPLE) then merge rows
+
+we exclude the all matrix data frame (note useful)
+As we need to compare FC_wts_wtns data between different sample and to do the same for FC_kos_kons between the different conditions, we need two different tables : one for FC_wts_wtns and one for FC_kos_kons. 
+
+In the intersample comparaison, the parameter paired is turned to FALSE because of the different nrow of each datatable. 
+
+```{r Function : Save all plots }
+
+SaveHeatmap<-function(DIRECTORY , PLOT, OUTPUT_NAME){
+  setwd(DIRECTORY)
+  ggsave(filename=paste(OUTPUT_NAME,".png",sep=""),
+         device="png",
+         plot=PLOT,
+         scale = 1, 
+         dpi=320)
+}
+
+```
+

@@ -1,0 +1,338 @@
+---
+title: "Plots&Statistics"
+author: "YoussefAyachi"
+date: "28/30/2021"
+output: html_document
+---
+
+
+# V. Data Analysis 
+
+## 1. Desnity plots of Fold Change scores to expect the distribution of our data. 
+```{r Plots : Distribution of log(Fold Change) scores}
+list_Score_dataframes<-list(AllMatrix_Score_df,Cluster_Score_df, KB100_NO_OAS_Score_df, KB100_NO_OAS_Score_df)
+
+#AllMatrix
+par(mfrow=c(3,2),oma = c(0, 0, 4, 0))
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$WTNS), main="WTNS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$WTS), main="WTS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$KONS), main="KONS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$KOS), main="KOS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$FC_wts_wtns),main="FC_wts_wtns",xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[1]])$FC_kos_kons), main="FC_kos_kons", xlab="Score",ylab="Density")
+mtext("AllMatrix scores distribution",outer = TRUE)
+
+
+#Cluster 
+par(mfrow=c(3,2),oma = c(0, 0, 4, 0))
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$WTNS), main="WTNS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$WTS), main="WTS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$KONS), main="KONS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$KOS), main="KOS", xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$FC_wts_wtns),main="FC_wts_wtns",xlab="Score",ylab="Density")
+hist(as.numeric(as.data.frame(list_Score_dataframes[[2]])$FC_kos_kons), main="FC_kos_kons", xlab="Score",ylab="Density")
+mtext("Cluster scores distribution",outer = TRUE)
+
+
+```
+
+One Can see that FC vectors seem to have Normal Distribution in both samples (Cluster And AllMatrix)
+
+## 2. Normality test for our score_df tables 
+Shapiro test can be done because of the length of our data vectors (>5000 values)
+
+i. We chose to do the Kolmogorov-Smirnov Normality test
+Remark : No Ex_aquo should be present to KS test.
+
+
+```{r Kolmogorov-Smirnov Test:  Verify Normality of log(FC) obtained vectors }
+
+AllMatrix_KS_pval<-vector()
+AllMatrix_KS_pval<-c(
+ks.test((unique(as.data.frame(list_Score_dataframes[[1]])$FC_wts_wtns)),"pnorm")$p.value,
+ks.test((unique(as.data.frame(list_Score_dataframes[[1]])$FC_kos_kons)),"pnorm")$p.value)
+
+Cluster_KS_pval<-vector()
+Cluster_KS_pval<-c(
+ks.test((unique(as.data.frame(list_Score_dataframes[[2]])$FC_wts_wtns)),"pnorm")$p.value,
+ks.test((unique(as.data.frame(list_Score_dataframes[[2]])$FC_kos_kons)),"pnorm")$p.value)
+
+# Kolmogorov-Smirnov Normality test results
+KS_df_rownames<-c("FC_wts_wtns", "FC_kos_kons")
+KS_df<-data.frame(Condition=KS_df_rownames,AllMatrix_KS_pval,Cluster_KS_pval)
+
+KS_df
+```
+
+```{r Lillifors : retest normality of FC_wts_wtns and FC_kos_kons}
+
+m1<-lillie.test( AllMatrix_Score_df$FC_wts_wtns )$p.value
+m2<-lillie.test( AllMatrix_Score_df$FC_kos_kons )$p.value
+c1<-lillie.test( Cluster_Score_df$FC_wts_wtns )$p.value
+c2<-lillie.test( Cluster_Score_df$FC_kos_kons )$p.value
+k1<-lillie.test( KB100_Score_df$FC_wts_wtns)$p.value
+k2<-lillie.test( KB100_Score_df$FC_kos_kons)$p.value
+kn1<-lillie.test( KB100_NO_OAS_Score_df$FC_wts_wtns)$p.value
+kn2<-lillie.test( KB100_NO_OAS_Score_df$FC_kos_kons)$p.value
+
+df_lillie.test<-data.frame(c(m1,m2),c(c1,c2),c(k1,k2),c(kn1,kn2))
+colnames(df_lillie.test)<-vec_sample_names
+df_lillie.test
+
+```
+
+P.values are <<0.01. FC_wts_wtns and FC_kos_kons distributions are normal. We can use the t.test. 
+
+
+```{r Statistical test :t.test: intrasample FC_wts_wtns VS FC_kons_kos}
+
+t.test(AllMatrix_Score_df$FC_wts_wtns,AllMatrix_Score_df$FC_kos_kons,paired=TRUE)
+
+t.test(Cluster_Score_df$FC_wts_wtns,Cluster_Score_df$FC_kos_kons,paired=TRUE)
+
+```
+
+Observation :
+In the Cluster, significant difference between FC_wts_wtns and FC_kos_kons (p=0.09).
+No significant difference between the same vectors in the AllMatrix data.
+
+## 3. Vilon Plots Intra Inter 
+### a. IntraSample Violin Plots
+
+```{r Plots -T.test- : Intrasample Violin Plots : Comparing FC_wts_wtns and FC_kos_kons in each sample , message=FALSE, warning=FALSE}
+        #a. define violin plots variables 
+violin_fc_allmatrix_ttest<-GetViolinFCPlotINTRA(AllMatrix_Score_df , "All Matrix","t.test")[[1]]
+violin_fc_cluster_ttest<-GetViolinFCPlotINTRA(Cluster_Score_df, "Cluster","t.test")[[1]]
+violin_fc_KB100_ttest<-GetViolinFCPlotINTRA(KB100_Score_df, "KB100" ,"t.test")[[1]]
+violin_fc_KB100_NO_OAS_ttest<-GetViolinFCPlotINTRA(KB100_NO_OAS_Score_df , "KB_NO_OAS","t.test")[[1]]
+
+        #b. Display Violin plots 
+grid_arrange_shared_legend( violin_fc_cluster_ttest, violin_fc_KB100_ttest, violin_fc_KB100_NO_OAS_ttest, ncol=3 , nrow=1 , top="Fold Change Violin Plots -T.Test-")
+
+```   
+
+```{r Plots -Wilcoxon.test- : Intrasample Violin Plots : Comparing FC_wts_wtns and FC_kos_kons in each sample , message=FALSE, warning=FALSE}
+        #a. define violin plots variables 
+violin_fc_allmatrix_wtest<-GetViolinFCPlotINTRA(AllMatrix_Score_df , "All Matrix","wilcox.test")[[1]]
+violin_fc_cluster_wtest<-GetViolinFCPlotINTRA(Cluster_Score_df, "Cluster","wilcox.test")[[1]]
+violin_fc_KB100_wtest<-GetViolinFCPlotINTRA(KB100_Score_df, "KB100" ,"wilcox.test")[[1]]
+violin_fc_KB100_NO_OAS_wtest<-GetViolinFCPlotINTRA(KB100_NO_OAS_Score_df , "KB_NO_OAS","wilcox.test")[[1]]
+
+        #b. Display Violin plots 
+grid_arrange_shared_legend( violin_fc_cluster_wtest, violin_fc_KB100_wtest, violin_fc_KB100_NO_OAS_wtest, ncol=3 , nrow=1 , top="Fold Change Violin Plots -Wilcoxon.Test-")
+
+```   
+
+Results of the chosen statistical test :
+
+```{r T.Test : results obtained on the violin plots , warning=FALSE, message=FALSE}
+
+        #e. define violin plots t.test outputs
+
+violin_fc_allmatrix_ttest_results<-GetViolinFCPlotINTRA(AllMatrix_Score_df , "All Matrix" , "t.test")[[2]]
+violin_fc_cluster_ttest_results<-GetViolinFCPlotINTRA(Cluster_Score_df, "Cluster", "t.test")[[2]]
+violin_fc_KB100_ttest_results<-GetViolinFCPlotINTRA(KB100_Score_df, "100kb" , "t.test")[[2]]
+violin_fc_KB100_NO_OAS_ttest_results<-GetViolinFCPlotINTRA(KB100_NO_OAS_Score_df, "100kb NO OAS", "t.test")[[2]]
+
+```
+
+```{r Wilcoxon Test : results obtained on the violin plots , warning=FALSE, message=FALSE}
+
+        #e. define violin plots t.test outputs
+
+violin_fc_allmatrix_wtest_results<-GetViolinFCPlotINTRA(AllMatrix_Score_df , "All Matrix" , "wilcox.test")[[2]]
+violin_fc_cluster_wtest_results<-GetViolinFCPlotINTRA(Cluster_Score_df, "Cluster", "wilcox.test")[[2]]
+violin_fc_KB100_wtest_results<-GetViolinFCPlotINTRA(KB100_Score_df, "100kb" , "wilcox.test")[[2]]
+violin_fc_KB100_NO_OAS_wtest_results<-GetViolinFCPlotINTRA(KB100_NO_OAS_Score_df, "100kb NO OAS", "wilcox.test")[[2]]
+
+```
+
+Verifying the t.test results manually : 
+
+```{r T.test : Manually on intrasmaple FC_wts_wtns and FC_kos_kons vectors.}
+
+a<-t.test(AllMatrix_Score_df$FC_wts_wtns , AllMatrix_Score_df$FC_kos_kons, paired=TRUE)$p.value
+b<-t.test(Cluster_Score_df$FC_wts_wtns , Cluster_Score_df$FC_kos_kons, paired=TRUE)$p.value
+c<-t.test(KB100_Score_df$FC_wts_wtns , KB100_Score_df$FC_kos_kons, paired=TRUE)$p.value
+d<-t.test(KB100_NO_OAS_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_kos_kons, paired=TRUE)$p.value
+
+df_intrasample_t.test<-c(a,b,c,d)
+names(df_intrasample_t.test)<-c("AllMatrix" , "Cluster" , "KB100" , "KB100_NO_OAS")
+
+df_intrasample_t.test
+```
+
+```{r Wilcoxon Test : Manually on intrasmaple FC_wts_wtns and FC_kos_kons vectors.}
+
+aw<-wilcox.test(AllMatrix_Score_df$FC_wts_wtns , AllMatrix_Score_df$FC_kos_kons, paired=TRUE)$p.value
+bw<-wilcox.test(Cluster_Score_df$FC_wts_wtns , Cluster_Score_df$FC_kos_kons, paired=TRUE)$p.value
+cw<-wilcox.test(KB100_Score_df$FC_wts_wtns , KB100_Score_df$FC_kos_kons, paired=TRUE)$p.value
+dw<-wilcox.test(KB100_NO_OAS_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_kos_kons, paired=TRUE)$p.value
+
+df_intrasample_w.test<-c(aw,bw,cw,dw)
+names(df_intrasample_w.test)<-c("AllMatrix" , "Cluster" , "KB100" , "KB100_NO_OAS")
+
+df_intrasample_w.test
+```
+
+### b. InterSample Violin Plots 
+
+Violin Plots InterSample : wts_wtns VS kos_kons
+wilcoxon with paired =FALSE beacause different length of the samples. 
+
+- Build dataframe of intersample : only 3 columns : C1=w or k ; C2=score ; C3=Sample
+- Build 3 data frames of 3 columns (one for each SAMPLE) then merge rows
+
+we exclude the all matrix data frame (note useful)
+As we need to compare FC_wts_wtns data between different sample and to do the same for FC_kos_kons between the different conditions, we need two different tables : one for FC_wts_wtns and one for FC_kos_kons. 
+
+In the intersample comparaison, the parameter paired is turned to FALSE because of the different nrow of each datatable. 
+
+```{r Plots -Wilcoxon.test- : Intersample Violin Plots for FC_wts_wtns and FC_kos_kons.}
+
+GetInterSampleVilonPlot<-function (TEST){
+
+if(TEST=="t.test"){
+  test<-"t.test"
+  plot_main_title<-"Intersample Fold Change Violin Plots -T.Test-"
+}else{
+  test<-"wilcox.test"
+  plot_main_title<-"Intersample Fold Change Violin Plots -Wilcoxon.Test-"
+}
+
+
+my_comparisons <- list( c("CLUSTER", "KB100") ,c("CLUSTER", "KB100_NO_OAS") , c( "KB100", "KB100_NO_OAS")) 
+
+            #wts_wtns
+df_test_w <- compare_means(FC_scores ~ Sample, comparisons = my_comparisons, p.adj= "holm", method=test, data = global_vertical_FC_df_wts_wtns , paired=FALSE)
+df_test_w <- df_test_w %>% mutate(y.position = c(5,6,4))
+
+            #kos_kons
+df_test_k <- compare_means(FC_scores ~ Sample, comparisons = my_comparisons, p.adj= "holm", method=test, data = global_vertical_FC_df_kos_kons , paired=FALSE)
+df_test_k <- df_test_k %>% mutate(y.position = c(5,6,4))
+
+
+    # Generating the violin plots : intersample
+
+            #wts_wtns
+Inter_sample_FC_violin_plot_w<-global_vertical_FC_df_wts_wtns %>% ggplot(aes(Sample, FC_scores)) + geom_violin(aes(fill=Sample))    + 
+geom_boxplot(width=0.1) +
+scale_x_discrete(limits=vec_name_df_sample_without_allmatrix) + 
+xlab(c("")) +  ggtitle("FC_Wts_Wtns") + 
+   theme(plot.title = element_text(hjust = 0.5)) + 
+   scale_fill_discrete(guide = guide_legend(reverse=TRUE) ) + 
+   guides(fill=guide_legend(title="")) +
+   ylab("")  + ylim(c(-3,6))+
+  stat_pvalue_manual(df_test_w, label = "p.format")
+
+            #kos_kons
+Inter_sample_FC_violin_plot_k <- global_vertical_FC_df_kos_kons %>% ggplot(aes(Sample, FC_scores)) + geom_violin(aes(fill=Sample))    + 
+geom_boxplot(width=0.1) +
+scale_x_discrete(limits=vec_name_df_sample_without_allmatrix) + 
+xlab(c("")) +  ggtitle("FC_Kos_Kons" ) + 
+   theme(plot.title = element_text(hjust = 0.5)) + 
+   scale_fill_discrete(guide = guide_legend(reverse=TRUE) ) + 
+   guides(fill=guide_legend(title="")) +
+   ylab("")  + ylim(c(-3,6))+
+  stat_pvalue_manual(df_test_k, label = "p.format")
+
+
+        #.Display Violin plots 
+
+return(grid_arrange_shared_legend( Inter_sample_FC_violin_plot_w, Inter_sample_FC_violin_plot_k, ncol=2 , nrow=1 , top=plot_main_title))
+}
+```
+
+```{r Plots : Intersample violin plots with t.test ans wilcoxon p.values}
+#t.test p.values
+GetInterSampleVilonPlot("t.test")
+
+#wilcoxon p.values
+GetInterSampleVilonPlot("wilcox.test")
+
+```
+
+```{r T.Test : Verification of p.values shown in the plot}
+#FC_wts_wtns
+at1<-t.test(Cluster_Score_df$FC_wts_wtns , KB100_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+bt1<-t.test(Cluster_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+ct1<-t.test(KB100_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+df_intersample_wt.ttest<-c(at1,bt1,ct1)
+names(df_intersample_wt.ttest)<-c("CLUSTER|KB100" , "CLUSTER|KB100_NO_OAS" ,"KB100|KB100_NO_OAS")
+
+
+#FC_kos_kons
+at2<-t.test(Cluster_Score_df$FC_kos_kons , KB100_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+bt2<-t.test(Cluster_Score_df$FC_kos_kons , KB100_NO_OAS_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+ct2<-t.test(KB100_Score_df$FC_kos_kons , KB100_NO_OAS_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+df_intersample_ko.ttest<-c(at2,bt2,ct2)
+names(df_intersample_ko.ttest)<-c("CLUSTER|KB100" , "CLUSTER|KB100_NO_OAS" ,"KB100|KB100_NO_OAS")
+
+
+#display the p.values of each test
+list(t.test_pvalues_FC_wts_wtns=df_intersample_wt.ttest, t.test_pvalues_FC_kos_kons=df_intersample_ko.ttest)
+
+```
+
+```{r Wilcoxon Test : Verification of p.values shown in the plot}
+#FC_wts_wtns
+aw1<-wilcox.test(Cluster_Score_df$FC_wts_wtns , KB100_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+bw1<-wilcox.test(Cluster_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+cw1<-wilcox.test(KB100_Score_df$FC_wts_wtns , KB100_NO_OAS_Score_df$FC_wts_wtns ,paires=FALSE)$p.value
+df_intersample_wt.wtest<-c(aw1,bw1,cw1)
+names(df_intersample_wt.wtest)<-c("CLUSTER|KB100" , "CLUSTER|KB100_NO_OAS" ,"KB100|KB100_NO_OAS")
+
+
+#FC_kos_kons
+aw2<-t.test(Cluster_Score_df$FC_kos_kons , KB100_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+bw2<-t.test(Cluster_Score_df$FC_kos_kons , KB100_NO_OAS_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+cw2<-t.test(KB100_Score_df$FC_kos_kons , KB100_NO_OAS_Score_df$FC_kos_kons ,paires=FALSE)$p.value
+df_intersample_ko.wtest<-c(aw2,bw2,cw2)
+names(df_intersample_ko.wtest)<-c("CLUSTER|KB100" , "CLUSTER|KB100_NO_OAS" ,"KB100|KB100_NO_OAS")
+
+#display the p.values of each test
+list(w.test_pvalues_FC_wts_wtns=df_intersample_wt.wtest, w.test_pvalues_FC_kos_kons=df_intersample_ko.wtest)
+```
+
+
+# VI. Heatmaps 
+
+```{r Defining Plots : Heatmaps}
+# All matrix 
+
+    # FC Scores
+Heatmap_AllMatrix_FC_WT                                                                         
+Heatmap_AllMatrix_FC_KO  
+Heatmap_AllMatrix_FC_WTNS_KONS 
+Heatmap_AllMatrix_FC_WTS_KOS
+
+    # Scores 
+Heatmap_AllMatrix_WTNS
+Heatmap_AllMatrix_WTS
+Heatmap_AllMatrix_KONS 
+Heatmap_AllMatrix_KOS 
+Heatmap_AllMatrix_PUBLISHED 
+
+#Cluster 
+  
+    # FC Scores
+Heatmap_Cluster_FC_WT 
+Heatmap_Cluster_FC_KO 
+Heatmap_Cluster_FC_WTNS_KONS 
+Heatmap_Cluster_FC_WTS_KOS 
+
+    # Scores
+Heatmap_Cluster_WTNS
+Heatmap_Cluster_WTS
+Heatmap_Cluster_KONS
+Heatmap_Cluster_KOS
+Heatmap_Cluster_PUBLISHED
+
+```
+
+
+
+
+
+
+

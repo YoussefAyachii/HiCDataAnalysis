@@ -1,0 +1,628 @@
+---
+title: "Execution"
+author: "YoussefAyachi"
+date: "5/28/2021"
+output: html_document
+---
+
+# I. FitHiC 
+The execution of FitHiC::FitHiC leads to 4 outputs : {.fithic.pass1 , .fithic.pass2 , .spline.pass1 (zipped, -spline.pass2 (zipped). 
+
+```{r Execution : FitHiC::FitHiC on the five datasets , include = FALSE}
+
+for(i in 1:5){
+  fragments_fullpath<-paste(vec_dataset_directories[i] , "fragments_table_wts.txt.gz", sep="")
+  interactions_fullpath_wts<-paste (vec_dataset_directories[i] , "interactions_table_wts.txt.gz",sep="")
+  output_path<-vec_dataset_directories[i]
+  from_list_to_df<-as.data.frame(list_finaltables[i])
+  
+  FitHiCLocalFucntion(GetFragmentsFile(from_list_to_df,12),GetInteractionsFile(from_list_to_df,12),fragments_fullpath,interactions_fullpath_wts,output_path)
+}
+```
+
+```{r Execution : Unzip FitHiC outputs}
+for(i in 1:length(vec_dataset_directories)){GetUnzippedFitHiCResults(vec_dataset_directories[i])}
+
+```
+
+Let's see an example of FitHiC outputs.
+```{r Execution : Example}
+example_to_show_1<-read.table(paste0(Dir_PUBLISHED,".fithic_pass1.txt") , header = TRUE)
+example_to_show_2<-read.table(paste0(Dir_PUBLISHED,".spline_pass2.significances.txt") , header = TRUE)
+head(example_to_show_1,5)
+head(example_to_show_2,5)
+```
+
+# II. Bed Graphs 
+A bedgraph is a 2D  graph that shows the interaction of one specific bin with all the others. It is read by a genome browser as USCS or WashU genome browser. 
+The inputs of the following function are the finaltables.
+We have chosen six 5 kilobase bins located in the OAS3 promoter region. 
+
+```{r Execution : on 6 bins, echo=FALSE }
+vec_bins_of_interest_for_bedgraphs<-c(113355000, 113360000, 113365000, 113370000, 113375000, 113380000)
+
+for (i in 1:length(list_finaltables)){
+  working.table<-as.data.frame(list_finaltables[i])
+  working.dir<-vec_dataset_directories[i]
+  
+  for(j in 1:length(vec_bins_of_interest_for_bedgraphs)){
+    bedgraph_output_name<-paste("Bedgraph_",vec_bins_of_interest_for_bedgraphs[j],".bed",sep="")
+    GetBedGraph(working.dir, working.table, bedgraph_output_name, "chr12", vec_bins_of_interest_for_bedgraphs[j],5000)
+  }}
+
+```
+
+
+# III. long_range file 
+## 1.  Get Long_range file from spline1-2
+
+```{r Execution : Get the long_range tables from spline1-2 (FitHiC outputs)}
+
+vec_spline_file_names<-c(".spline_pass1.significances.txt.gz" , ".spline_pass2.significances.txt.gz")
+
+for(i in 1:length(vec_dataset_names)){
+  for(j in 1:length(vec_spline_file_names)){ #for each spline file
+GetLongRangeFile(12 , 5000 , vec_dataset_directories[i] , vec_spline_file_names[j] , paste("long_range_from_spline_",j,"_",vec_dataset_names[i],".bed",sep="") , 0)
+  }
+}
+
+```
+
+## 2.  Get Long_range file from spline1-2 and filtred for certain bins of interest
+
+```{r Execution : Get the long_range tables of a specific bin}
+
+for(i in length(vec_dataset_directories)){
+  setwd(vec_dataset_directories[i])
+  for(j in 1:length(vec_bins_of_interest_for_bedgraphs)){
+    write.table(GetLongRangeFileSpeceficBin(vec_bins_of_interest_for_bedgraphs[j]))
+    }
+}
+
+```
+
+## 3.  Get Long_range file from finaltables 
+This time, we eill get the long range tables directly from the finaltables inputs instead of using FitHiC outputs. 
+
+```{r Execution : Get the long_range tables on finaltables}
+#EXECUTION on each fithic file (1,2) of each dataset (n=5)
+
+for(i in 1:length(vec_dataset_names)){ 
+GetLongRangeFileFromFinaltable(12 , 5000 , Dir_Finaltables , vec_finaltable_name[i] , paste("long_range_from_finaltable_",vec_dataset_names[i],".bed",sep="") , 0)
+}
+
+```
+
+## 4.  Get Long_range file from finaltables filtred on bins of interest
+
+```{r Execution : LONG_RANGE for specific bins}
+for(k in 1:length(vec_dataset_directories)){
+  setwd(vec_dataset_directories[k])
+  for(j in 1:length(vec_bins_of_interest_for_bedgraphs)){
+    write.table(GetLongRangeFileFromFinaltableSpeceficBin(vec_bins_of_interest_for_bedgraphs[j]))
+    }
+  }
+
+```
+
+# IV. Descriptive Statistics : Bulding Score Tables For Each Sample 
+
+## 1. AllMatrix And Cluster data manipulation
+
+### a. Build a sparse matrix for the cluster (AllMatrix, Cluster , 100kb , 100kb No OAS ) from the sparse tables (608x608)
+
+```{r Execution : Get Sparse Matrix for a defined bins interval}
+#Cluster
+Cluster_Wtns_sparse_matrix<-GetSparseOfInterest(AllMatrix_Wtns_sparse_matrix,"wts","Cluster",5000,"chr12",113340000,113450000)
+Cluster_Wts_sparse_matrix<-GetSparseOfInterest(AllMatrix_Wts_sparse_matrix,"wts","Cluster",5000,"chr12",113340000,113450000)
+Cluster_Kons_sparse_matrix<-GetSparseOfInterest(AllMatrix_Kons_sparse_matrix,"wts","Cluster",5000,"chr12",113340000,113450000)
+Cluster_Kos_sparse_matrix<-GetSparseOfInterest(AllMatrix_Kos_sparse_matrix,"wts","Cluster",5000,"chr12",113340000,113450000)
+Cluster_Published_sparse_matrix<-GetSparseOfInterest(AllMatrix_Published_sparse_matrix,"wts","Cluster",5000,"chr12",113340000,113450000)
+
+```
+
+### b. Get Sparse Matrix vectors
+
+```{r Exectuion : VERY LONG EXECUTION : Get sparse matrix vector }
+
+#AllMatrix
+AllMatrix_Wtns_Sparse_Matrix_Vector <- GetVectorFromMatrix(AllMatrix_Wtns_sparse_matrix)
+AllMatrix_Wts_Sparse_Matrix_Vector <- GetVectorFromMatrix(AllMatrix_Wts_sparse_matrix)
+AllMatrix_Kons_Sparse_Matrix_Vector <- GetVectorFromMatrix(AllMatrix_Kons_sparse_matrix)
+AllMatrix_Kos_Sparse_Matrix_Vector <- GetVectorFromMatrix(AllMatrix_Kos_sparse_matrix)
+AllMatrix_Published_Sparse_Matrix_Vector <- GetVectorFromMatrix(AllMatrix_Published_sparse_matrix)
+
+AllMatrix_Wtns_Sparse_Matrix_Vector <-unlist(AllMatrix_Wtns_Sparse_Matrix_Vector)
+AllMatrix_Wts_Sparse_Matrix_Vector <-unlist(AllMatrix_Wts_Sparse_Matrix_Vector)
+AllMatrix_Kons_Sparse_Matrix_Vector <-unlist(AllMatrix_Kons_Sparse_Matrix_Vector)
+AllMatrix_Kos_Sparse_Matrix_Vector<-unlist(AllMatrix_Kos_Sparse_Matrix_Vector)
+AllMatrix_Published_Sparse_Matrix_Vector <-unlist(AllMatrix_Published_Sparse_Matrix_Vector)
+
+#Cluster
+Cluster_Wtns_Sparse_Matrix_Vector <- GetVectorFromMatrix(Cluster_Wtns_sparse_matrix)
+Cluster_Wts_Sparse_Matrix_Vector <- GetVectorFromMatrix(Cluster_Wts_sparse_matrix)
+Cluster_Kons_Sparse_Matrix_Vector <- GetVectorFromMatrix(Cluster_Kons_sparse_matrix)
+Cluster_Kos_Sparse_Matrix_Vector <- GetVectorFromMatrix(Cluster_Kos_sparse_matrix)
+Cluster_Published_Sparse_Matrix_Vector <- GetVectorFromMatrix(Cluster_Published_sparse_matrix)
+
+```
+
+### c. Clean Sparse Matrices Vector
+
+We replace 0 by min to not get NAs in Fold Change vectors computed further. 
+
+```{r Execution : Cleaning All Sparse Matrices vector from All Inf , -Inf and Replace all 0 by min}
+
+#All Matrix 
+AllMatrix_Wtns_Sparse_Matrix_Vector <- GetCleanVector(AllMatrix_Wtns_Sparse_Matrix_Vector)
+AllMatrix_Wts_Sparse_Matrix_Vector <- GetCleanVector(AllMatrix_Wts_Sparse_Matrix_Vector)
+AllMatrix_Kons_Sparse_Matrix_Vector <- GetCleanVector(AllMatrix_Kons_Sparse_Matrix_Vector)
+AllMatrix_Kos_Sparse_Matrix_Vector <- GetCleanVector(AllMatrix_Kos_Sparse_Matrix_Vector)
+AllMatrix_Published_Sparse_Matrix_Vector <- GetCleanVector(AllMatrix_Published_Sparse_Matrix_Vector)
+
+#Cluster
+Cluster_Wtns_Sparse_Matrix_Vector <- GetCleanVector(Cluster_Wtns_Sparse_Matrix_Vector)
+Cluster_Wts_Sparse_Matrix_Vector <- GetCleanVector(Cluster_Wts_Sparse_Matrix_Vector)
+Cluster_Kons_Sparse_Matrix_Vector <- GetCleanVector(Cluster_Kons_Sparse_Matrix_Vector)
+Cluster_Kos_Sparse_Matrix_Vector <- GetCleanVector(Cluster_Kos_Sparse_Matrix_Vector)
+Cluster_Published_Sparse_Matrix_Vector <- GetCleanVector(Cluster_Published_Sparse_Matrix_Vector)
+
+
+
+```
+
+columns are : WTNS, WTS, KONS, KOS, PUBLISHED, FC_wts_wtns, FC_kos_kons, binA and binB 
+Each row represent an interaction between binA and binB.
+
+```{r Execution -LONG EXECUTION- : Build Score Table for each sample}
+FC_DF_COLNAMES<- c("WTNS","WTS","KONS","KOS","PUBLISHED","FC_wts_wtns","FC_kos_kons" , "FC_wtns_kons","FC_wts_kos", "A_BIN","B_BIN")
+
+#AllMatrix
+AllMatrix_Score_df <- data.frame(
+  WTNS=AllMatrix_Wtns_Sparse_Matrix_Vector,
+  WTS=AllMatrix_Wts_Sparse_Matrix_Vector,
+  KONS=AllMatrix_Kons_Sparse_Matrix_Vector,
+  KOS=AllMatrix_Kos_Sparse_Matrix_Vector,
+  PUNLISHED=AllMatrix_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(AllMatrix_Wts_Sparse_Matrix_Vector/AllMatrix_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(AllMatrix_Kos_Sparse_Matrix_Vector/AllMatrix_Published_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(AllMatrix_Wtns_Sparse_Matrix_Vector/AllMatrix_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(AllMatrix_Wts_Sparse_Matrix_Vector/AllMatrix_Kos_Sparse_Matrix_Vector),
+  A_BIN=(GetBinInteractionVetors(AllMatrix_Wtns_sparse_matrix)[1]),
+  B_BIN=(GetBinInteractionVetors(AllMatrix_Wtns_sparse_matrix)[2])
+)
+colnames(AllMatrix_Score_df)<-FC_DF_COLNAMES
+
+
+#Cluster
+
+Cluster_Score_df<-data.frame(
+  WTNS=Cluster_Wtns_Sparse_Matrix_Vector, 
+  WTS=Cluster_Wts_Sparse_Matrix_Vector, 
+  KONS=Cluster_Kons_Sparse_Matrix_Vector, 
+  KOS=Cluster_Kos_Sparse_Matrix_Vector, 
+  PUBLISHED=Cluster_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(Cluster_Wts_Sparse_Matrix_Vector/Cluster_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(Cluster_Kos_Sparse_Matrix_Vector/Cluster_Kons_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(Cluster_Wtns_Sparse_Matrix_Vector/Cluster_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(Cluster_Wts_Sparse_Matrix_Vector/Cluster_Kos_Sparse_Matrix_Vector),
+  A_BIN=GetCleanVector(GetBinInteractionVetors(Cluster_Wtns_sparse_matrix)[[1]]),
+  B_BIN=GetCleanVector(GetBinInteractionVetors(Cluster_Wtns_sparse_matrix)[[2]]))
+
+colnames(Cluster_Score_df)<-FC_DF_COLNAMES
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+### d. Build Score Table for each Sample with Fold Change columns.
+
+columns are : WTNS, WTS, KONS, KOS, PUBLISHED, FC_wts_wtns, FC_kos_kons, binA and binB 
+Each row represent an interaction between binA and binB.
+
+```{r Execution -LONG EXECUTION- : Build Score Table for each sample}
+FC_DF_COLNAMES<- c("WTNS","WTS","KONS","KOS","PUBLISHED","FC_wts_wtns","FC_kos_kons" , "FC_wtns_kons","FC_wts_kos", "A_BIN","B_BIN")
+
+#AllMatrix
+AllMatrix_Score_df <- data.frame(
+  WTNS=AllMatrix_Wtns_Sparse_Matrix_Vector,
+  WTS=AllMatrix_Wts_Sparse_Matrix_Vector,
+  KONS=AllMatrix_Kons_Sparse_Matrix_Vector,
+  KOS=AllMatrix_Kos_Sparse_Matrix_Vector,
+  PUNLISHED=AllMatrix_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(AllMatrix_Wts_Sparse_Matrix_Vector/AllMatrix_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(AllMatrix_Kos_Sparse_Matrix_Vector/AllMatrix_Published_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(AllMatrix_Wtns_Sparse_Matrix_Vector/AllMatrix_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(AllMatrix_Wts_Sparse_Matrix_Vector/AllMatrix_Kos_Sparse_Matrix_Vector),
+  A_BIN=(GetBinInteractionVetors(AllMatrix_Wtns_sparse_matrix)[1]),
+  B_BIN=(GetBinInteractionVetors(AllMatrix_Wtns_sparse_matrix)[2])
+)
+colnames(AllMatrix_Score_df)<-FC_DF_COLNAMES
+
+
+#Cluster
+
+Cluster_Score_df<-data.frame(
+  WTNS=Cluster_Wtns_Sparse_Matrix_Vector, 
+  WTS=Cluster_Wts_Sparse_Matrix_Vector, 
+  KONS=Cluster_Kons_Sparse_Matrix_Vector, 
+  KOS=Cluster_Kos_Sparse_Matrix_Vector, 
+  PUBLISHED=Cluster_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(Cluster_Wts_Sparse_Matrix_Vector/Cluster_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(Cluster_Kos_Sparse_Matrix_Vector/Cluster_Kons_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(Cluster_Wtns_Sparse_Matrix_Vector/Cluster_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(Cluster_Wts_Sparse_Matrix_Vector/Cluster_Kos_Sparse_Matrix_Vector),
+  A_BIN=GetCleanVector(GetBinInteractionVetors(Cluster_Wtns_sparse_matrix)[[1]]),
+  B_BIN=GetCleanVector(GetBinInteractionVetors(Cluster_Wtns_sparse_matrix)[[2]]))
+
+colnames(Cluster_Score_df)<-FC_DF_COLNAMES
+
+```
+
+## 2. KB100 and KB100_NO_OAS
+Our Bin length = 100 000 
+Our lower bin start is the first row name bin : 111875000
+
+```{r Execution : GetAllBinStartEachFixedInterval}
+
+Start_100KB_BINS<-GetAllBinStartEachFixedInterval(111875000, 114910578 , 100000, 5000)
+
+```
+
+Our Bin length = 100 000.
+Our lower bin start is the first row name bin : 111875000.
+Becarfull , the last bin of 100Kb which is starting from 114875000. Thus, When aligning heatmaps with genome sequece, use the upper limit : 114875000-. OAS_cluster removed for KB100_NO_OASis equal to two bins. 
+The follwing function will output a list of 15 clumns , each three coluns are ex: wtns,binA,binB,wts,binA,binB,kons,.. The binA and binB are the same. 
+
+```{r Execution : Get KB100 and KB100_NO_OAS Score_df}
+
+#Get Initial_Score_df 
+
+KB100_Initial_Score_list<-GetKB100ScoreTable(TRUE)
+KB100_NO_OAS_Initial_Score_list<-GetKB100ScoreTable(FALSE)
+
+# Build score vectors 
+#KNOS TO CHANGE BY KONS
+
+    #KB100
+KB100_Wtns_Sparse_Matrix_Vector<-GetCleanVector(KB100_Initial_Score_list[[1]])
+KB100_Wts_Sparse_Matrix_Vector<-GetCleanVector(KB100_Initial_Score_list[[4]])
+KB100_Kons_Sparse_Matrix_Vector<-GetCleanVector(KB100_Initial_Score_list[[7]])
+KB100_Kos_Sparse_Matrix_Vector<-GetCleanVector(KB100_Initial_Score_list[[10]])
+KB100_Published_Sparse_Matrix_Vector<-GetCleanVector(KB100_Initial_Score_list[[13]])
+KB100_binA<-GetCleanVector(KB100_Initial_Score_list[[14]])
+KB100_binB<-GetCleanVector(KB100_Initial_Score_list[[15]])
+
+
+    #KB100_NO_OAS
+KB100_NO_OAS_Wtns_Sparse_Matrix_Vector<-GetCleanVector(KB100_NO_OAS_Initial_Score_list[[1]])
+KB100_NO_OAS_Wts_Sparse_Matrix_Vector<-GetCleanVector(KB100_NO_OAS_Initial_Score_list[[4]])
+KB100_NO_OAS_Kons_Sparse_Matrix_Vector<-GetCleanVector(KB100_NO_OAS_Initial_Score_list[[7]])
+KB100_NO_OAS_Kos_Sparse_Matrix_Vector<-GetCleanVector(KB100_NO_OAS_Initial_Score_list[[10]])
+KB100_NO_OAS_Published_Sparse_Matrix_Vector<-GetCleanVector(KB100_NO_OAS_Initial_Score_list[[13]])
+KB100_NO_OAS_binA<-KB100_NO_OAS_Initial_Score_list[[14]]
+KB100_NO_OAS_binB<-KB100_NO_OAS_Initial_Score_list[[15]]
+
+
+# Build The Final KB100_Score_df  :
+
+    #KB100
+KB100_Score_df<-data.frame(
+  WTNS=KB100_Wtns_Sparse_Matrix_Vector, 
+  WTS=KB100_Wts_Sparse_Matrix_Vector, 
+  KONS=KB100_Kons_Sparse_Matrix_Vector, 
+  KOS=KB100_Kos_Sparse_Matrix_Vector, 
+  PUBLISHED=KB100_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(KB100_Wts_Sparse_Matrix_Vector/KB100_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(KB100_Kos_Sparse_Matrix_Vector/KB100_Kons_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(KB100_Wtns_Sparse_Matrix_Vector/KB100_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(KB100_Wts_Sparse_Matrix_Vector/KB100_Kos_Sparse_Matrix_Vector),
+  A_BIN=KB100_binA,
+  B_BIN=KB100_binB)
+
+colnames(KB100_Score_df)<-FC_DF_COLNAMES
+
+    #KB100_NO_OAS
+KB100_NO_OAS_Score_df<-data.frame(
+  WTNS=KB100_NO_OAS_Wtns_Sparse_Matrix_Vector, 
+  WTS=KB100_NO_OAS_Wts_Sparse_Matrix_Vector, 
+  KONS=KB100_NO_OAS_Kons_Sparse_Matrix_Vector, 
+  KOS=KB100_NO_OAS_Kos_Sparse_Matrix_Vector, 
+  PUBLISHED=KB100_NO_OAS_Published_Sparse_Matrix_Vector,
+  FC_wts_wtns=log2(KB100_NO_OAS_Wts_Sparse_Matrix_Vector/KB100_NO_OAS_Wtns_Sparse_Matrix_Vector),
+  FC_kos_kons=log2(KB100_NO_OAS_Kos_Sparse_Matrix_Vector/KB100_NO_OAS_Kons_Sparse_Matrix_Vector),
+  FC_wtns_kons=log2(KB100_NO_OAS_Wtns_Sparse_Matrix_Vector/KB100_NO_OAS_Kons_Sparse_Matrix_Vector),
+  FC_wts_kos=log2(KB100_NO_OAS_Wts_Sparse_Matrix_Vector/KB100_NO_OAS_Kos_Sparse_Matrix_Vector),
+  A_BIN=KB100_NO_OAS_binA,
+  B_BIN=KB100_NO_OAS_binB)
+
+colnames(KB100_NO_OAS_Score_df)<-FC_DF_COLNAMES
+
+```
+
+
+# V. Data Analysis 
+## 1. Desnity plots of Fold Change scores to expect the distribution of our data. 
+
+
+One Can see that FC vectors seem to have Normal Distribution in both samples (Cluster And AllMatrix)
+
+## 2. Normality test for our score_df tables 
+Shapiro test can be done because of the length of our data vectors (>5000 values)
+
+i. We chose to do the Kolmogorov-Smirnov Normality test
+Remark : No Ex_aquo should be present to KS test.
+
+```{r Execution : Save K-S and L tests results}
+setwd(Dir_Figures)
+
+write.table(KS_df, "Kolmogorov_Smirnov_Normality_test_results.txt" , sep="\t", row.names=FALSE,col.names=TRUE,quote=FALSE)
+
+write.table(df_lillie.test, "Lillifors_Normality_test_results.txt" , sep="\t", row.names=FALSE,col.names=TRUE,quote=FALSE)
+
+```
+
+P.values are <<0.01. FC_wts_wtns and FC_kos_kons distributions are normal. We can use the t.test. 
+
+Observation :
+In the Cluster, significant difference between FC_wts_wtns and FC_kos_kons (p=0.09).
+No significant difference between the same vectors in the AllMatrix data.
+
+## 3. Vilon Plots Intra Inter 
+### a. IntraSample Violin Plots
+
+```{r Execution : Save Each Plot Seperately}
+
+# T.Test plots 
+
+ggsave(filename=paste("violin_fc_allmatrix_ttest",".png",sep=""), plot = violin_fc_allmatrix_ttest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_cluster_ttest",".png",sep=""), plot = violin_fc_cluster_ttest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_KB100_ttest",".png",sep=""), plot = violin_fc_KB100_ttest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_KB100_NO_OAS_ttest",".png",sep=""), plot = violin_fc_KB100_NO_OAS_ttest , path=Dir_Figures, dpi=320)
+
+#  Wilcoxon Plots
+
+ggsave(filename=paste("violin_fc_allmatrix_wtest",".png",sep=""), plot = violin_fc_allmatrix_wtest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_cluster_wtest",".png",sep=""), plot = violin_fc_cluster_wtest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_KB100_wtest",".png",sep=""), plot = violin_fc_KB100_wtest , path=Dir_Figures, dpi=320)
+
+ggsave(filename=paste("violin_fc_KB100_NO_OAS_wtest",".png",sep=""), plot = violin_fc_KB100_NO_OAS_wtest , path=Dir_Figures, dpi=320)
+
+
+```
+
+### b. InterSample Violin Plots 
+
+Violin Plots InterSample : wts_wtns VS kos_kons
+wilcoxon with paired =FALSE beacause different length of the samples. 
+
+- Build dataframe of intersample : only 3 columns : C1=w or k ; C2=score ; C3=Sample
+- Build 3 data frames of 3 columns (one for each SAMPLE) then merge rows
+
+we exclude the all matrix data frame (note useful)
+
+```{r Execution : Building input dataframes needed }
+
+    #a. Building sample specific dataframe according to ggplot : 3 columns ={"wts_wtns"/"kos_kons" ; score ; Sample}
+
+vec_name_df_sample<-vector()
+list_df_sample<-list()
+
+for(i in 1:length(list_Score_dataframes)){
+  working.table<-as.data.frame(list_Score_dataframes[i])
+  wts_wtns_vec_name<-rep("wts_wtns",nrow(working.table))
+  kos_kons_vec_name<-rep("kos_knos",nrow(working.table))
+  wts_wtns_FC<-working.table[,6]
+  kos_kons_FC<-working.table[,7]
+
+  sample_name<-rep(vec_sample_names[i], length(c(wts_wtns_vec_name,kos_kons_vec_name)))
+  
+  df<-data.frame(c(wts_wtns_vec_name,kos_kons_vec_name),c(wts_wtns_FC,kos_kons_FC),sample_name)
+  
+  nam<-paste("df_",vec_sample_names[i], sep="")
+  assign(nam , df)
+  
+  vec_name_df_sample<-c(vec_name_df_sample,nam)
+}
+# -> We end up with three data frames : {df_ALLMATRIX ; df_CLUSTER ; df_KB100 ;df_KB100_NO_OAS } : 
+list.working.table<-list(df_CLUSTER, df_ALLMATRIX , df_KB100,df_KB100_NO_OAS)
+#Note : here we exclude A;;Matrix dataframe. To add it, just add "df_ALLMATRIX" as the first variable of the list.working.table.
+
+    #b. merge the 4 tables vertically 
+vec_name_df_sample_without_allmatrix<-c("CLUSTER"    ,"KB100"      ,  "KB100_NO_OAS")
+
+global_df_col1<-c() ; global_df_col2<-c() ; global_df_col3<-c()
+
+for(i in 1:length(vec_name_df_sample)){
+  working.table<-as.data.frame(list.working.table[i])
+  global_df_col1<-c(global_df_col1,working.table[,1])
+  global_df_col2<-c(global_df_col2,working.table[,2])
+  global_df_col3<-c(global_df_col3,working.table[,3])
+}
+
+global_vertical_FC_df<-data.frame(
+  Condition=global_df_col1,
+  FC_scores=global_df_col2,
+  Sample=global_df_col3)
+
+```
+
+As we need to compare FC_wts_wtns data between different sample and to do the same for FC_kos_kons between the different conditions, we need two different tables : one for FC_wts_wtns and one for FC_kos_kons. 
+
+
+```{r Execution : Prepare needed dataframes for each condition : FC_wts_wtns and FC_kos_kons}
+
+global_vertical_FC_df_wts_wtns<- global_vertical_FC_df %>% filter(Condition=="wts_wtns") %>% filter (Sample %in% c("CLUSTER" ,"KB100", "KB100_NO_OAS")) 
+
+global_vertical_FC_df_kos_kons<- global_vertical_FC_df %>% filter(Condition!="wts_wtns") %>% filter (Sample %in% c("CLUSTER" ,"KB100", "KB100_NO_OAS")) 
+
+```
+
+In the intersample comparaison, the parameter paired is turned to FALSE because of the different nrow of each datatable. 
+
+
+```{r Execution : Defining Heatmaps}
+# All matrix 
+
+    # FC Scores
+Heatmap_AllMatrix_FC_WT  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wts_wtns)) + geom_tile() + ggtitle("All Matrix Wts/Wtns Fold Change Heatmap") + scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+                                                                                          
+Heatmap_AllMatrix_FC_KO  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_kos_kons)) + geom_tile() + ggtitle("All Matrix Kos/Kons Fold Change Heatmap") + 
+  scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_FC_WTNS_KONS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wtns_kons)) + geom_tile() + ggtitle("All Matrix Wtns/Kons Fold Change Heatmap") + 
+  scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_FC_WTS_KOS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wts_kos)) + geom_tile() + ggtitle("All Matrix Wts/Kos Fold Change Heatmap") + 
+  scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+    # Scores 
+
+Heatmap_AllMatrix_WTNS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=WTNS)) + geom_tile() + ggtitle("All Matrix WTNS Heatmap") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_WTS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=WTS)) + geom_tile() + ggtitle("All Matrix WTS Heatmap") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_KONS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=KONS)) + geom_tile() + ggtitle("All Matrix KONS Heatmap") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_KOS  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=KOS)) + geom_tile() + ggtitle("All Matrix KOS Heatmap") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_AllMatrix_PUBLISHED  <-AllMatrix_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=PUBLISHED)) + geom_tile() + ggtitle("All Matrix PUBLISHED Heatmap") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+
+#Cluster 
+  
+    # FC
+
+Heatmap_Cluster_FC_WT  <-Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wts_wtns)) + geom_tile() + ggtitle("All Matrix Wts/Wtns Fold Change Heatmap") + scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_Cluster_FC_KO  <-Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_kos_kons)) + geom_tile() + ggtitle("Cluster Kos/Kons Fold Change Heatmap") + scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_Cluster_FC_WTNS_KONS  <-Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wtns_kons)) + geom_tile() + ggtitle("Cluster Wtns/Kons Fold Change Heatmap") + 
+  scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+Heatmap_Cluster_FC_WTS_KOS  <-Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=FC_wts_kos)) + geom_tile() + ggtitle("Cluster Wts/Kos Fold Change Heatmap") + 
+  scale_fill_gradientn(colours=c("#0000FF","white","#FF0000"), na.value="#DAD7D3", limits=c(-2.5,2.5)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) + coord_fixed()
+
+    # Scores
+
+Heatmap_Cluster_WTNS<- Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=WTNS)) + geom_tile() + 
+  ggtitle("Cluster Heatmap - WTNS Data") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+  coord_fixed()
+
+Heatmap_Cluster_WTS<- Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=WTS)) + geom_tile() + 
+  ggtitle("Cluster Heatmap - WTS Data") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+  coord_fixed()
+
+Heatmap_Cluster_KONS<- Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=KONS)) + geom_tile() + 
+  ggtitle("Cluster Heatmap - KONS Data") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+  coord_fixed()
+
+Heatmap_Cluster_KOS<- Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=KOS)) + geom_tile() + 
+  ggtitle("Cluster Heatmap - KOS Data") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+  coord_fixed()
+
+Heatmap_Cluster_PUBLISHED<- Cluster_Score_df %>% ggplot(aes(A_BIN, B_BIN, fill=PUBLISHED)) + geom_tile() + 
+  ggtitle("Cluster Heatmap - PUBLISHED Data") + 
+  scale_fill_gradientn(colours=c("white","#FF0000"), na.value="#DAD7D3",limits = c(0,0.02)) +   
+  theme(axis.title.x=element_blank(), axis.text.x=element_blank(), axis.ticks.x=element_blank(),
+        axis.title.y=element_blank(),axis.text.y=element_blank(),axis.ticks.y=element_blank()) +
+  coord_fixed()
+
+#Added for all matrix : two columns : FC_wtns_kons , FC_wts_kos
+
+```
+
+```{r Execution : Save Heatmaps }
+
+list_AllMatrix_AllHeatmaps<-list (Heatmap_AllMatrix_WTNS, Heatmap_AllMatrix_WTS, Heatmap_AllMatrix_KONS, Heatmap_AllMatrix_KOS, Heatmap_AllMatrix_PUBLISHED, Heatmap_AllMatrix_FC_WT, Heatmap_AllMatrix_FC_KO, Heatmap_AllMatrix_FC_WTNS_KONS, Heatmap_AllMatrix_FC_WTS_KOS)
+
+list_AllMatrix_AllHeatmaps_Names<-list ("Heatmap_AllMatrix_WTNS", "Heatmap_AllMatrix_WTS", "Heatmap_AllMatrix_KONS", "Heatmap_AllMatrix_KOS", "Heatmap_AllMatrix_PUBLISHED", "Heatmap_AllMatrix_FC_WT", "Heatmap_AllMatrix_FC_KO" , "Heatmap_AllMatrix_FC_WTNS_KONS" , "Heatmap_AllMatrix_FC_WTS_KOS")
+
+
+list_Cluster_AllHeatmaps<-list(Heatmap_Cluster_WTNS , Heatmap_Cluster_WTS,Heatmap_Cluster_KONS, Heatmap_Cluster_KOS, Heatmap_Cluster_PUBLISHED, Heatmap_Cluster_FC_WT  , Heatmap_Cluster_FC_KO, Heatmap_Cluster_FC_WTNS_KONS, Heatmap_Cluster_FC_WTS_KOS )
+
+list_Cluster_AllHeatmaps_Names<-list("Heatmap_Cluster_WTNS" , "Heatmap_Cluster_WTS","Heatmap_Cluster_KONS", "Heatmap_Cluster_KOS", "Heatmap_Cluster_PUBLISHED", "Heatmap_Cluster_FC_WT"  , "Heatmap_Cluster_FC_KO", "Heatmap_Cluster_FC_WTNS_KONS", "Heatmap_Cluster_FC_WTS_KOS")
+
+
+for(i in 1:length(list_AllMatrix_AllHeatmaps_Names)){
+  ggsave(filename=paste(list_AllMatrix_AllHeatmaps_Names[i],".png",sep=""), plot = list_AllMatrix_AllHeatmaps[[i]], path=Dir_Figures , dpi=320)
+}
+
+for(i in 1:length(list_Cluster_AllHeatmaps_Names)){
+  ggsave(filename=paste(list_Cluster_AllHeatmaps_Names[i],".png",sep=""), plot = list_Cluster_AllHeatmaps[[i]], path=Dir_Figures, dpi=320)
+}
+
+
+```
+
+
+
